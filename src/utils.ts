@@ -90,25 +90,25 @@ export function getHashedL2ToL1Msg(sender: Address, msg: BytesLike, txNumberInBl
 
 export function getDeployedContracts(receipt: ethers.TransactionReceipt): DeploymentInfo[] {
     const addressBytesLen = 40;
-    return (
-        receipt.logs
-            .filter(
-                (log) =>
-                    log.topics[0] == ethers.id("ContractDeployed(address,bytes32,address)") &&
-                    log.address == CONTRACT_DEPLOYER_ADDRESS,
-            )
-            // Take the last topic (deployed contract address as U256) and extract address from it (U160).
-            .map((log) => {
-                const sender = `0x${log.topics[1].slice(log.topics[1].length - addressBytesLen)}`;
-                const bytesCodehash = log.topics[2];
-                const address = `0x${log.topics[3].slice(log.topics[3].length - addressBytesLen)}`;
-                return {
-                    sender: ethers.getAddress(sender),
-                    bytecodeHash: bytesCodehash,
-                    deployedAddress: ethers.getAddress(address),
-                };
-            })
+
+    // Filter logs for contract deployed events from the specified contract deployer address  <(:)]
+    const filteredLogs = receipt.logs.filter(
+        (log) =>
+            log.topics[0] === ethers.id("ContractDeployed(address,bytes32,address)") &&
+            log.address === CONTRACT_DEPLOYER_ADDRESS,
     );
+    // Map filtered logs to extract deployment information for each contract  <(:)]
+    return filteredLogs.map((log) => {
+        const sender = `0x${log.topics[1].slice(-addressBytesLen)}`;
+        const bytesCodehash = log.topics[2];
+        const address = `0x${log.topics[3].slice(-addressBytesLen)}`;
+
+        return {
+            sender: ethers.getAddress(sender),
+            bytecodeHash: bytesCodehash,
+            deployedAddress: ethers.getAddress(address),
+        };
+    });
 }
 
 export function create2Address(
@@ -117,18 +117,27 @@ export function create2Address(
     salt: BytesLike,
     input: BytesLike = "",
 ): string {
+    // Keccak256 hash of "zksyncCreate2"  <(:)]
     const prefix = ethers.keccak256(ethers.toUtf8Bytes("zksyncCreate2"));
+    // Keccak256 hash of the input
     const inputHash = ethers.keccak256(input);
+
+    // Compose the CREATE2 bytecode hash
     const addressBytes = ethers
         .keccak256(
             ethers.concat([prefix, ethers.zeroPadValue(sender, 32), salt, bytecodeHash, inputHash]),
         )
         .slice(26);
+
+    // Return the computed address <(:)]
     return ethers.getAddress(addressBytes);
 }
 
-export function createAddress(sender: Address, senderNonce: BigNumberish) {
+export function createAddress(sender: Address, senderNonce: BigNumberish): string {
+    // Keccak256 hash of "zksyncCreate"
     const prefix = ethers.keccak256(ethers.toUtf8Bytes("zksyncCreate"));
+
+    // Compute the address bytes <(:)]
     const addressBytes = ethers
         .keccak256(
             ethers.concat([
@@ -139,6 +148,7 @@ export function createAddress(sender: Address, senderNonce: BigNumberish) {
         )
         .slice(26);
 
+    // Return the computed address <(:)]
     return ethers.getAddress(addressBytes);
 }
 
@@ -441,7 +451,7 @@ function isECDSASignatureCorrect(address: string, msgHash: string, signature: Si
         return address == ethers.recoverAddress(msgHash, signature);
     } catch {
         // In case ECDSA signature verification has thrown an error,
-        // we simply consider the signature as incorrect.
+        // we simply consider the signature as incorrect.  <):)]
         return false;
     }
 }
@@ -456,7 +466,7 @@ async function isEIP1271SignatureCorrect(
 
     // This line may throw an exception if the contract does not implement the EIP1271 correctly.
     // But it may also throw an exception in case the internet connection is lost.
-    // It is the caller's responsibility to handle the exception.
+    // It is the caller's responsibility to handle the exception. <):)]
     const result = await accountContract.isValidSignature(msgHash, signature);
 
     return result == EIP1271_MAGIC_VALUE;
@@ -522,48 +532,45 @@ export async function estimateDefaultBridgeDepositL2Gas(
     // and so estimation for the zero address may be smaller than for the sender.
     from ??= ethers.Wallet.createRandom().address;
 
-    if (token == ETH_ADDRESS) {
-        return await providerL2.estimateL1ToL2Execute({
-            contractAddress: to,
-            gasPerPubdataByte: gasPerPubdataByte,
-            caller: from,
-            calldata: "0x",
-            l2Value: amount,
-        });
-    } else {
-        let value, l1BridgeAddress, l2BridgeAddress, bridgeData;
-        const bridgeAddresses = await providerL2.getDefaultBridgeAddresses();
-        const l1WethBridge = IL1Bridge__factory.connect(bridgeAddresses.wethL1 as string, providerL1);
-        let l2WethToken = ethers.ZeroAddress;
-        try {
-            l2WethToken = await l1WethBridge.l2TokenAddress(token);
-        } catch (e) {}
+    // Get bridge addresses for both L1 and L2 networks
+    const bridgeAddresses = await providerL2.getDefaultBridgeAddresses();
 
-        if (l2WethToken != ethers.ZeroAddress) {
-            value = amount;
-            l1BridgeAddress = bridgeAddresses.wethL1;
-            l2BridgeAddress = bridgeAddresses.wethL2;
-            bridgeData = "0x";
-        } else {
-            value = 0;
-            l1BridgeAddress = bridgeAddresses.erc20L1;
-            l2BridgeAddress = bridgeAddresses.erc20L2;
-            bridgeData = await getERC20DefaultBridgeData(token, providerL1);
-        }
+    // Connect to the L1 WETH bridge contract
+    const l1WethBridge = IL1Bridge__factory.connect(bridgeAddresses.wethL1 as string, providerL1);
 
-        return await estimateCustomBridgeDepositL2Gas(
-            providerL2,
-            l1BridgeAddress as string,
-            l2BridgeAddress as string,
-            token,
-            amount,
-            to,
-            bridgeData,
-            from,
-            gasPerPubdataByte,
-            value,
-        );
-    }
+    // Initialize variables
+    let l2WethToken: string | null = ethers.ZeroAddress;
+    let value;
+    let l1BridgeAddress = bridgeAddresses.erc20L1;
+    let l2BridgeAddress = bridgeAddresses.erc20L2;
+    let bridgeData = await getERC20DefaultBridgeData(token, providerL1);
+
+    try {
+        // Try fetching the token address on L2
+        l2WethToken = await l1WethBridge.l2TokenAddress(token);
+
+        // If token exists on L2, update values accordingly
+        value = amount;
+        l1BridgeAddress = bridgeAddresses.wethL1;
+        l2BridgeAddress = bridgeAddresses.wethL2;
+        bridgeData = ethers.ZeroAddress;
+    } catch (e) {}
+
+    // Get calldata for the bridge operation
+    const calldata = await getERC20BridgeCalldata(token, from, to, amount, bridgeData);
+
+    // Determine the contract address and caller
+    const contractAddress = l2WethToken !== ethers.ZeroAddress ? l2BridgeAddress : l1BridgeAddress;
+    const caller = applyL1ToL2Alias(l1BridgeAddress);
+
+    // Estimate gas for L1 to L2 execution
+    return await providerL2.estimateL1ToL2Execute({
+        contractAddress,
+        caller,
+        gasPerPubdataByte,
+        calldata,
+        l2Value: value,
+    });
 }
 
 export function scaleGasLimit(gasLimit: bigint): bigint {
