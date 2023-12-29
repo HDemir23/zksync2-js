@@ -25,14 +25,16 @@
         "ethereum",
         "layer2"
     ],
-    "dependencies": {},
+    "dependencies": {
+        "zksync2-js": "^0.4.0"
+    },
     "devDependencies": {
         "@typechain/ethers-v6": "^0.5.0",
         "@types/chai": "^4.3.9",
         "@types/mocha": "^10.0.1",
         "@types/node": "^20.5.2",
         "chai": "^4.3.10",
-        "ethers": "^6.7.1",
+        "ethers": "6",
         "mocha": "^10.2.0",
         "ncp": "^2.0.0",
         "nyc": "^15.1.0",
