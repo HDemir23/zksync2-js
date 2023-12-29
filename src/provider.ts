@@ -591,20 +591,26 @@ export class Provider extends JsonRpcApiProvider(ethers.JsonRpcProvider) {
         return resp;
     }
 
-    static getDefaultProvider(zksyncNetwork: ZkSyncNetwork = ZkSyncNetwork.Localhost) {
-        if (process.env.ZKSYNC_WEB3_API_URL) {
-            return new Provider(process.env.ZKSYNC_WEB3_API_URL);
-        }
+    static getDefaultProvider(zksyncNetwork: ZkSyncNetwork = ZkSyncNetwork.Localhost): Provider {
+        let apiUrl;
         switch (zksyncNetwork) {
             case ZkSyncNetwork.Localhost:
-                return new Provider("http://localhost:3050");
+                apiUrl = "http://localhost:3050";
+                break;
             case ZkSyncNetwork.Goerli:
-                return new Provider("https://zksync2-testnet.zksync.dev");
+                apiUrl = "https://zksync2-testnet.zksync.dev";
+                break;
             case ZkSyncNetwork.Sepolia:
-                return new Provider("https://sepolia.era.zksync.dev");
+                apiUrl = "https://sepolia.era.zksync.dev";
+                break;
             case ZkSyncNetwork.Mainnet:
-                return new Provider("https://mainnet.era.zksync.io");
+                apiUrl = "https://mainnet.era.zksync.io";
+                break;
+            default:
+                throw new Error("Unsupported network");
         }
+
+        return new Provider(apiUrl);
     }
 }
 

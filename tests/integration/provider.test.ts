@@ -11,7 +11,7 @@ describe("Provider", () => {
     const provider = Provider.getDefaultProvider(types.Network.Localhost);
     const wallet = new Wallet(PRIVATE_KEY, provider);
 
-    let tx = null;
+    let tx;
 
     before("setup", async function () {
         this.timeout(25_000);
